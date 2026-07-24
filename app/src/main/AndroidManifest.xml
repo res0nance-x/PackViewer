@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <application
+        android:allowBackup="true"
+        android:usesCleartextTraffic="true"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="@xml/backup_rules"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.PackViewer">
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:label="@string/app_name"
+            android:theme="@style/Theme.PackViewer"
+            android:launchMode="singleTask"
+            android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+            <!-- Handle modern content:// URIs (from File Managers, Drive, etc.) -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="content" />
+                <!-- Catch standard binary files that custom extensions are usually assigned -->
+                <data android:mimeType="application/octet-stream" />
+                <!-- Catch specific types in case a smart file manager assigns them -->
+                <data android:mimeType="application/pack" />
+                <data android:mimeType="application/x-pack" />
+                <data android:mimeType="application/epack" />
+                <!-- Notice: NO pathPattern, pathSuffix, or host here! -->
+            </intent-filter>
+
+            <!-- Handle legacy file:// URIs (Optional, but safe to keep for older apps) -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="file" />
+                <data android:mimeType="*/*" />
+                <!-- pathSuffix works perfectly for file:// URIs because the path is the actual file path -->
+                <data android:pathSuffix=".pack" />
+                <data android:pathSuffix=".epack" />
+            </intent-filter>
+        </activity>
+    </application>
+
+</manifest>
