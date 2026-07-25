@@ -1,9 +1,13 @@
 package r3.packviewer
 
+import android.Manifest
 import android.annotation.SuppressLint
+import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.Color as AndroidColor
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.provider.OpenableColumns
 import android.view.ViewGroup
@@ -41,8 +45,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.content.ContextCompat
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -60,12 +66,18 @@ import r3.pke.Password256
 import java.io.File
 
 class MainActivity : ComponentActivity() {
-	private var webServer: WebServer? = null
 	private var intentUri = mutableStateOf<Uri?>(null)
+
 	override fun onCreate(savedInstanceState: Bundle?) {
 		enableEdgeToEdge()
 		super.onCreate(savedInstanceState)
 		handleIntent(intent)
+
+		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+			if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+				requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 101)
+			}
+		}
 
 		setContent {
 			PackViewerTheme {
@@ -116,17 +128,20 @@ class MainActivity : ComponentActivity() {
 
 	override fun onDestroy() {
 		super.onDestroy()
-		webServer?.stop()
 	}
 
 	@SuppressLint("SetJavaScriptEnabled")
 	@Composable
 	fun PackViewerApp(initialUri: Uri? = null) {
-		var currentUrl by remember { mutableStateOf<String?>(null) }
+		val context = LocalContext.current
 		var showPasswordDialog by remember { mutableStateOf(false) }
 		var pendingUri by remember { mutableStateOf<Uri?>(null) }
 		var errorMessage by remember { mutableStateOf<String?>(null) }
 		val coroutineScope = rememberCoroutineScope()
+		
+		val listeningPort = PackHolder.listeningPort
+		val currentUrl = if (listeningPort != 0) "http://localhost:$listeningPort/" else null
+
 		fun processUri(uri: Uri) {
 			val fileName = getFileName(uri)
 			if (fileName.endsWith(".epack", ignoreCase = true)) {
@@ -135,9 +150,7 @@ class MainActivity : ComponentActivity() {
 			} else {
 				coroutineScope.launch {
 					try {
-						loadPack(uri, null) { url ->
-							currentUrl = url
-						}
+						loadPack(uri, null)
 					} catch (e: Exception) {
 						errorMessage = e.message
 					}
@@ -182,9 +195,7 @@ class MainActivity : ComponentActivity() {
 						if (uri != null) {
 							coroutineScope.launch {
 								try {
-									loadPack(uri, password) { url ->
-										currentUrl = url
-									}
+									loadPack(uri, password)
 								} catch (e: Exception) {
 									errorMessage = e.message
 								}
@@ -207,9 +218,9 @@ class MainActivity : ComponentActivity() {
 
 		if (currentUrl != null) {
 			BackHandler {
-				currentUrl = null
-				webServer?.stop()
-				webServer = null
+				val intent = Intent(context, MediaPlaybackService::class.java)
+				intent.action = "STOP"
+				context.startService(intent)
 			}
 			Box(
 				modifier = Modifier
@@ -233,7 +244,9 @@ class MainActivity : ComponentActivity() {
 						}
 					},
 					update = { webView ->
-						webView.loadUrl(currentUrl!!)
+						if (webView.url != currentUrl) {
+							webView.loadUrl(currentUrl)
+						}
 					},
 					modifier = Modifier.fillMaxSize()
 				)
@@ -255,11 +268,11 @@ class MainActivity : ComponentActivity() {
 		}
 	}
 
-	private suspend fun loadPack(uri: Uri, passwordStr: String?, onUrlReady: (String) -> Unit) {
-		withContext(Dispatchers.IO) {
+	private suspend fun loadPack(uri: Uri, passwordStr: String?) {
+		val pack = withContext(Dispatchers.IO) {
 			val source = UriSource(contentResolver, uri)
 			val fileName = getFileName(uri)
-			val pack: Pack = if (fileName.endsWith(".epack", ignoreCase = true) && !passwordStr.isNullOrEmpty()) {
+			if (fileName.endsWith(".epack", ignoreCase = true) && !passwordStr.isNullOrEmpty()) {
 				val pass = Password256(passwordStr.toByteArray().hash256())
 				val sequence = EncryptedSequence.createSequence(pass)
 				val encryptedSrc = EncryptedSource(sequence, source)
@@ -267,34 +280,11 @@ class MainActivity : ComponentActivity() {
 			} else {
 				BinaryPack(source)
 			}
-
-			webServer?.stop()
-			val tmpDir = File(cacheDir, "server_tmp")
-			tmpDir.mkdirs()
-			val ws = WebServer(null, 0, tmpDir)
-			ws.handlers.add(HandlerFactory.createLogRouter())
-			ws.handlers.add(HandlerFactory.createWelcomeHandler())
-			ws.handlers.add(HandlerFactory.createPackHandler(pack))
-			ws.handlers.add(ContentHandler { header, _ ->
-				if (header.optString("path") == "/index.html") {
-					try {
-						assets.open("index.html").use { inputStream ->
-							val bytes = inputStream.readBytes()
-							BinaryContent(bytes, "index.html", "html")
-						}
-					} catch (e: Exception) {
-						null
-					}
-				} else null
-			})
-
-			ws.start(0, false)
-			webServer = ws
-
-			withContext(Dispatchers.Main) {
-				onUrlReady("http://localhost:${ws.listeningPort}/")
-			}
 		}
+
+		PackHolder.currentPack = pack
+		val intent = Intent(this, MediaPlaybackService::class.java)
+		startForegroundService(intent)
 	}
 
 	@SuppressLint("Range")
