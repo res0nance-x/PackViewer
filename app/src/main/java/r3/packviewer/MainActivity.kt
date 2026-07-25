@@ -2,15 +2,15 @@ package r3.packviewer
 
 import android.Manifest
 import android.annotation.SuppressLint
-import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.graphics.Color as AndroidColor
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.OpenableColumns
+import android.view.View
 import android.view.ViewGroup
+import android.widget.FrameLayout
 import android.webkit.WebChromeClient
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -52,18 +52,13 @@ import androidx.core.content.ContextCompat
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import r3.content.BinaryContent
 import r3.encryption.EncryptedSource
 import r3.hash.hash256
-import r3.http.ContentHandler
-import r3.http.HandlerFactory
-import r3.http.WebServer
 import r3.math.EncryptedSequence
 import r3.pack.BinaryPack
-import r3.pack.Pack
 import r3.packviewer.ui.theme.PackViewerTheme
 import r3.pke.Password256
-import java.io.File
+import android.graphics.Color as AndroidColor
 
 class MainActivity : ComponentActivity() {
 	private var intentUri = mutableStateOf<Uri?>(null)
@@ -138,6 +133,9 @@ class MainActivity : ComponentActivity() {
 		var pendingUri by remember { mutableStateOf<Uri?>(null) }
 		var errorMessage by remember { mutableStateOf<String?>(null) }
 		val coroutineScope = rememberCoroutineScope()
+		
+		var customView by remember { mutableStateOf<View?>(null) }
+		var customViewCallback by remember { mutableStateOf<WebChromeClient.CustomViewCallback?>(null) }
 		
 		val listeningPort = PackHolder.listeningPort
 		val currentUrl = if (listeningPort != 0) "http://localhost:$listeningPort/" else null
@@ -218,9 +216,13 @@ class MainActivity : ComponentActivity() {
 
 		if (currentUrl != null) {
 			BackHandler {
-				val intent = Intent(context, MediaPlaybackService::class.java)
-				intent.action = "STOP"
-				context.startService(intent)
+				if (customView != null) {
+					customViewCallback?.onCustomViewHidden()
+				} else {
+					val intent = Intent(context, MediaPlaybackService::class.java)
+					intent.action = "STOP"
+					context.startService(intent)
+				}
 			}
 			Box(
 				modifier = Modifier
@@ -240,7 +242,17 @@ class MainActivity : ComponentActivity() {
 							settings.domStorageEnabled = true
 							settings.mediaPlaybackRequiresUserGesture = false
 							webViewClient = WebViewClient()
-							webChromeClient = WebChromeClient()
+							webChromeClient = object : WebChromeClient() {
+								override fun onShowCustomView(view: View?, callback: CustomViewCallback?) {
+									customView = view
+									customViewCallback = callback
+								}
+
+								override fun onHideCustomView() {
+									customView = null
+									customViewCallback = null
+								}
+							}
 						}
 					},
 					update = { webView ->
@@ -250,6 +262,19 @@ class MainActivity : ComponentActivity() {
 					},
 					modifier = Modifier.fillMaxSize()
 				)
+
+				if (customView != null) {
+					AndroidView(
+						factory = { ctx ->
+							FrameLayout(ctx).apply {
+								setBackgroundColor(AndroidColor.BLACK)
+								(customView?.parent as? ViewGroup)?.removeView(customView)
+								addView(customView)
+							}
+						},
+						modifier = Modifier.fillMaxSize()
+					)
+				}
 			}
 		} else {
 			Column(
