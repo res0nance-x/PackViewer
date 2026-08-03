@@ -54,6 +54,11 @@ class MediaPlaybackService : Service() {
         return START_STICKY
     }
 
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        super.onTaskRemoved(rootIntent)
+        stopSelf()
+    }
+
     private fun startWebServer(pack: Pack) {
         webServer?.stop()
         val tmpDir = File(cacheDir, "server_tmp")

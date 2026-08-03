@@ -260,6 +260,13 @@ class MainActivity : ComponentActivity() {
 							webView.loadUrl(currentUrl)
 						}
 					},
+					onRelease = { webView ->
+						webView.stopLoading()
+						webView.loadUrl("about:blank")
+						webView.onPause()
+						webView.removeAllViews()
+						webView.destroy()
+					},
 					modifier = Modifier.fillMaxSize()
 				)
 
