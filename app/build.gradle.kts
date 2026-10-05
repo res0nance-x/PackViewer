@@ -45,7 +45,7 @@ android {
 		getByName("main") {
 			java.srcDirs(
 				file("src/main/java"),
-				file("D:/IdeaProjects/R3/src")
+				file("D:/IdeaProjects/R3/src/main/kotlin")
 			)
 			assets.srcDirs(
 				file("src/main/assets"),
@@ -55,7 +55,7 @@ android {
 }
 
 tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
-	source(file("D:/IdeaProjects/R3/src"))
+	source(file("D:/IdeaProjects/R3/src/main/kotlin"))
 }
 dependencies {
 	//noinspection UseTomlInstead
